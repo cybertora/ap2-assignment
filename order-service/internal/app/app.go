@@ -9,8 +9,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// Config хранит конфигурацию Order Service.
-// Все значения берутся ТОЛЬКО из переменных окружения (никакого хардкода).
 type Config struct {
 	DBHost     string
 	DBPort     string
@@ -20,12 +18,10 @@ type Config struct {
 	DBSSLMode  string
 	ServerPort string
 
-	// NEW в Assignment 2:
-	PaymentGRPCAddr string // Адрес Payment gRPC сервера (из .env)
-	GRPCPort        string // Порт для собственного gRPC сервера (стриминг)
+	PaymentGRPCAddr string
+	GRPCPort        string
 }
 
-// LoadConfig загружает конфигурацию из переменных окружения.
 func LoadConfig() *Config {
 	return &Config{
 		DBHost:     getEnv("DB_HOST", "localhost"),
@@ -36,13 +32,11 @@ func LoadConfig() *Config {
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
 		ServerPort: getEnv("SERVER_PORT", "8080"),
 
-		// gRPC конфигурация — ТОЛЬКО через .env
 		PaymentGRPCAddr: getEnv("PAYMENT_GRPC_ADDR", "localhost:50051"),
 		GRPCPort:        getEnv("GRPC_PORT", "50052"),
 	}
 }
 
-// ConnectDB устанавливает подключение к PostgreSQL.
 func ConnectDB(cfg *Config) *sql.DB {
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
