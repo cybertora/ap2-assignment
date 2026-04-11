@@ -251,22 +251,6 @@ service OrderService {
 }
 ```
 
----
-
-## ✅ Grading Checklist
-
-| Requirement | Points | Status |
-|---|---|---|
-| Contract-First Flow (2 repos, GitHub Actions, tagged release) | 30% | ✅ |
-| gRPC Implementation (client/server, Clean Architecture preserved) | 30% | ✅ |
-| Proto Design & Config (.proto quality, .env for all addresses) | 15% | ✅ |
-| Streaming & DB Integration (real-time LISTEN/NOTIFY, no Sleep) | 15% | ✅ |
-| Documentation & Git (README, diagrams, version history) | 10% | ✅ |
-| **Bonus**: gRPC Interceptor (method + duration logging) | +10% | ✅ |
-| **Total** | **110%** | ✅ |
-
----
-
 ## 🔄 Shutdown
 ```bash
 docker-compose down -v
