@@ -7,5 +7,5 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     );
 
-CREATE INDEX idx_payments_order_id ON payments (order_id);
-CREATE INDEX idx_payments_transaction_id ON payments (transaction_id);
+CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments (order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_transaction_id ON payments (transaction_id);

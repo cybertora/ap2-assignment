@@ -8,5 +8,5 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
     );
 
-CREATE INDEX idx_orders_idempotency_key ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE INDEX idx_orders_customer_id ON orders (customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders (idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders (customer_id);

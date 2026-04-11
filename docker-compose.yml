@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # ─── Databases ─────────────────────────────────────────────────────
   order-db:
     image: postgres:16-alpine
     container_name: order-db
@@ -37,34 +38,15 @@ services:
       timeout: 5s
       retries: 5
 
-  order-service:
-    build:
-      context: ./order-service
-      dockerfile: Dockerfile
-    container_name: order-service
-    ports:
-      - "8080:8080"
-    environment:
-      DB_HOST: order-db
-      DB_PORT: "5432"
-      DB_USER: order_user
-      DB_PASSWORD: order_pass
-      DB_NAME: order_db
-      DB_SSLMODE: disable
-      SERVER_PORT: "8080"
-      PAYMENT_SERVICE_URL: "http://payment-service:8081"
-    depends_on:
-      order-db:
-        condition: service_healthy
-    restart: on-failure
-
+  # ─── Payment Service (gRPC Server + REST) ──────────────────────────
   payment-service:
     build:
       context: ./payment-service
       dockerfile: Dockerfile
     container_name: payment-service
     ports:
-      - "8081:8081"
+      - "8081:8081"    # REST (GET /payments/:order_id)
+      - "50051:50051"  # gRPC (ProcessPayment)
     environment:
       DB_HOST: payment-db
       DB_PORT: "5432"
@@ -73,9 +55,36 @@ services:
       DB_NAME: payment_db
       DB_SSLMODE: disable
       SERVER_PORT: "8081"
+      GRPC_PORT: "50051"
     depends_on:
       payment-db:
         condition: service_healthy
+    restart: on-failure
+
+  # ─── Order Service (REST + gRPC Client → Payment + gRPC Server Streaming) ──
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    ports:
+      - "8080:8080"    # REST (POST /orders, GET /orders/:id, etc.)
+      - "50052:50052"  # gRPC (SubscribeToOrderUpdates streaming)
+    environment:
+      DB_HOST: order-db
+      DB_PORT: "5432"
+      DB_USER: order_user
+      DB_PASSWORD: order_pass
+      DB_NAME: order_db
+      DB_SSLMODE: disable
+      SERVER_PORT: "8080"
+      PAYMENT_GRPC_ADDR: "payment-service:50051"
+      GRPC_PORT: "50052"
+    depends_on:
+      order-db:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
     restart: on-failure
 
 volumes:

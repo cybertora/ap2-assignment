@@ -14,6 +14,4 @@ var (
 	ErrPaymentDeclined = errors.New("payment declined")
 
 	ErrDuplicateIdempotencyKey = errors.New("duplicate idempotency key")
-
-	ErrInvalidCustomerID = errors.New("invalid customerr id") //ошибка айдишки
 )

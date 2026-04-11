@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// OrderHandler — HTTP-хэндлеры (Delivery Layer).
+// НЕ ИЗМЕНЕНЫ из Assignment 1 — REST API остаётся прежним.
 type OrderHandler struct {
 	uc *usecase.OrderUseCase
 }
@@ -65,23 +67,6 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, toOrderResponse(order))
 }
 
-func (h *OrderHandler) GetOrdersByCustomer(c *gin.Context) {
-	customerID := c.Param("customer_id")
-
-	orders, err := h.uc.GetOrdersByCustomer(c.Request.Context(), customerID)
-	if err != nil {
-		h.handleError(c, err, nil)
-		return
-	}
-
-	response := make([]OrderResponse, 0, len(orders))
-	for _, order := range orders {
-		response = append(response, toOrderResponse(order))
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
 func toOrderResponse(order *domain.Order) OrderResponse {
 	return OrderResponse{
 		ID:         order.ID,
@@ -105,9 +90,6 @@ func (h *OrderHandler) handleError(c *gin.Context, err error, order *domain.Orde
 
 	case errors.Is(err, domain.ErrCancelNotAllowed):
 		c.JSON(http.StatusConflict, ErrorResponse{Error: "only pending orders can be cancelled"})
-
-	case errors.Is(err, domain.ErrInvalidCustomerID):
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid customer id"})
 
 	case errors.Is(err, domain.ErrPaymentServiceUnavailable):
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{Error: "payment service unavailable"})

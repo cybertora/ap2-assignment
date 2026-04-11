@@ -3,17 +3,26 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 
 	"order-service/internal/domain"
 )
 
+// PostgresOrderRepository реализует usecase.OrderRepository.
+// В Assignment 2 добавлен EventBus для PostgreSQL NOTIFY при обновлении статуса.
 type PostgresOrderRepository struct {
-	db *sql.DB
+	db       *sql.DB
+	eventBus *PgEventBus // NEW: для NOTIFY при обновлении статуса
 }
 
 func NewPostgresOrderRepository(db *sql.DB) *PostgresOrderRepository {
 	return &PostgresOrderRepository{db: db}
+}
+
+// SetEventBus подключает EventBus для отправки уведомлений при изменении статуса.
+func (r *PostgresOrderRepository) SetEventBus(eb *PgEventBus) {
+	r.eventBus = eb
 }
 
 func (r *PostgresOrderRepository) Create(ctx context.Context, order *domain.Order) error {
@@ -65,7 +74,11 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 	return &order, nil
 }
 
+// UpdateStatus обновляет статус заказа и ОТПРАВЛЯЕТ PostgreSQL NOTIFY.
+// Это обеспечивает реальный стриминг — подписчики получают обновления
+// через LISTEN/NOTIFY, а не через time.Sleep() polling.
 func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, id string, status string) error {
+	// Обновляем статус в БД
 	query := `UPDATE orders SET status = $1 WHERE id = $2`
 	result, err := r.db.ExecContext(ctx, query, status, id)
 	if err != nil {
@@ -77,48 +90,20 @@ func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, id string, s
 	if rows == 0 {
 		return domain.ErrOrderNotFound
 	}
-	return nil
-}
 
-func (r *PostgresOrderRepository) GetByCustomerID(ctx context.Context, customerID string) ([]*domain.Order, error) {
-	query := `
-		SELECT id, customer_id, item_name, amount, status, idempotency_key, created_at
-		FROM orders
-		WHERE customer_id = $1
-		ORDER BY created_at DESC
-	`
-	rows, err := r.db.QueryContext(ctx, query, customerID)
-	if err != nil {
-		log.Printf("[ERROR] PostgresOrderRepository.GetByCustomerID: %v", err)
-		return nil, err
-	}
-	defer rows.Close()
-
-	var orders []*domain.Order
-	for rows.Next() {
-		var order domain.Order
-		err := rows.Scan(
-			&order.ID,
-			&order.CustomerID,
-			&order.ItemName,
-			&order.Amount,
-			&order.Status,
-			&order.IdempotencyKey,
-			&order.CreatedAt,
-		)
-		if err != nil {
-			log.Printf("[ERROR] PostgresOrderRepository.GetByCustomerID scan: %v", err)
-			return nil, err
+	// NEW: отправляем NOTIFY для реального стриминга
+	if r.eventBus != nil {
+		payload := fmt.Sprintf("%s:%s", id, status)
+		notifyQuery := fmt.Sprintf("NOTIFY order_updates, '%s'", payload)
+		if _, err := r.db.ExecContext(ctx, notifyQuery); err != nil {
+			log.Printf("[WARN] failed to send NOTIFY: %v", err)
+			// Не возвращаем ошибку — основная операция уже выполнена
+		} else {
+			log.Printf("[INFO] NOTIFY sent: order_updates -> %s", payload)
 		}
-		orders = append(orders, &order)
 	}
 
-	if err := rows.Err(); err != nil {
-		log.Printf("[ERROR] PostgresOrderRepository.GetByCustomerID rows iteration: %v", err)
-		return nil, err
-	}
-
-	return orders, nil
+	return nil
 }
 
 func (r *PostgresOrderRepository) GetByIdempotencyKey(ctx context.Context, key string) (*domain.Order, error) {
