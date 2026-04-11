@@ -2,8 +2,6 @@ package http
 
 import "github.com/gin-gonic/gin"
 
-// NewRouter — НЕ ИЗМЕНЁН из Assignment 1.
-// REST API остаётся тем же для внешних клиентов.
 func NewRouter(handler *OrderHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

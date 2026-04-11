@@ -11,8 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// OrderHandler — HTTP-хэндлеры (Delivery Layer).
-// НЕ ИЗМЕНЕНЫ из Assignment 1 — REST API остаётся прежним.
 type OrderHandler struct {
 	uc *usecase.OrderUseCase
 }

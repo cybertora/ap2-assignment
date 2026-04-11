@@ -2,8 +2,6 @@ package http
 
 import "time"
 
-// DTO — НЕ ИЗМЕНЕНЫ из Assignment 1.
-
 type CreateOrderRequest struct {
 	CustomerID string `json:"customer_id" binding:"required"`
 	ItemName   string `json:"item_name" binding:"required"`

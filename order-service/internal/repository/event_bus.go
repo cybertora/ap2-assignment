@@ -9,30 +9,20 @@ import (
 	"github.com/lib/pq"
 )
 
-// PgEventBus обеспечивает реальный стриминг через PostgreSQL LISTEN/NOTIFY.
-// Это ключевой компонент для требования "Real-time DB Integration" (15%).
-//
-// Принцип работы:
-// 1. При UpdateStatus в репозитории отправляется NOTIFY order_updates, 'order_id:status'
-// 2. PgEventBus слушает канал "order_updates" через PostgreSQL LISTEN
-// 3. Подписчики (gRPC стриминг) получают события для конкретного order_id
-// 4. Никаких time.Sleep() — только реальные события из базы данных!
 type PgEventBus struct {
-	dsn       string
-	listener  *pq.Listener
-	mu        sync.RWMutex
+	dsn      string
+	listener *pq.Listener
+	mu       sync.RWMutex
 	// subscribers: map[order_id] -> slice of channels
 	subscribers map[string][]chan OrderEvent
 	done        chan struct{}
 }
 
-// OrderEvent — событие об изменении статуса заказа.
 type OrderEvent struct {
 	OrderID string
 	Status  string
 }
 
-// NewPgEventBus создаёт новый EventBus.
 func NewPgEventBus(dsn string) *PgEventBus {
 	return &PgEventBus{
 		dsn:         dsn,
@@ -41,7 +31,6 @@ func NewPgEventBus(dsn string) *PgEventBus {
 	}
 }
 
-// Start запускает PostgreSQL LISTEN на канале "order_updates".
 func (eb *PgEventBus) Start() error {
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
@@ -57,13 +46,11 @@ func (eb *PgEventBus) Start() error {
 
 	log.Println("[INFO] EventBus: LISTEN on channel 'order_updates' started")
 
-	// Горутина для обработки уведомлений
 	go eb.listen()
 
 	return nil
 }
 
-// listen — основной цикл обработки PostgreSQL NOTIFY.
 func (eb *PgEventBus) listen() {
 	for {
 		select {
@@ -71,11 +58,9 @@ func (eb *PgEventBus) listen() {
 			return
 		case notification := <-eb.listener.Notify:
 			if notification == nil {
-				// Reconnect notification
 				continue
 			}
 
-			// Payload формат: "order_id:status"
 			parts := strings.SplitN(notification.Extra, ":", 2)
 			if len(parts) != 2 {
 				log.Printf("[EventBus WARN] invalid payload: %s", notification.Extra)
@@ -89,7 +74,6 @@ func (eb *PgEventBus) listen() {
 
 			log.Printf("[EventBus] received: order_id=%s status=%s", event.OrderID, event.Status)
 
-			// Рассылаем подписчикам этого конкретного order_id
 			eb.mu.RLock()
 			subs, ok := eb.subscribers[event.OrderID]
 			if ok {
@@ -107,8 +91,6 @@ func (eb *PgEventBus) listen() {
 	}
 }
 
-// Subscribe подписывается на события для конкретного order_id.
-// Возвращает канал, из которого можно читать OrderEvent.
 func (eb *PgEventBus) Subscribe(orderID string) chan OrderEvent {
 	ch := make(chan OrderEvent, 10)
 
@@ -120,7 +102,6 @@ func (eb *PgEventBus) Subscribe(orderID string) chan OrderEvent {
 	return ch
 }
 
-// Unsubscribe отписывается от событий для order_id.
 func (eb *PgEventBus) Unsubscribe(orderID string, ch chan OrderEvent) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
@@ -133,7 +114,6 @@ func (eb *PgEventBus) Unsubscribe(orderID string, ch chan OrderEvent) {
 		}
 	}
 
-	// Удаляем ключ, если нет подписчиков
 	if len(eb.subscribers[orderID]) == 0 {
 		delete(eb.subscribers, orderID)
 	}
@@ -142,7 +122,6 @@ func (eb *PgEventBus) Unsubscribe(orderID string, ch chan OrderEvent) {
 	log.Printf("[EventBus] subscriber removed for order %s", orderID)
 }
 
-// Stop останавливает EventBus.
 func (eb *PgEventBus) Stop() {
 	close(eb.done)
 	if eb.listener != nil {

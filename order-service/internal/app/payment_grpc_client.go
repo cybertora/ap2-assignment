@@ -11,16 +11,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// GRPCPaymentClient — gRPC-клиент для вызова Payment Service.
-// Реализует интерфейс usecase.PaymentGateway (Clean Architecture).
-// Заменяет REST-клиент из Assignment 1.
 type GRPCPaymentClient struct {
 	conn   *grpc.ClientConn
 	client paymentpb.PaymentServiceClient
 }
 
-// NewGRPCPaymentClient создаёт gRPC-подключение к Payment Service.
-// Адрес берётся из .env (PAYMENT_GRPC_ADDR).
 func NewGRPCPaymentClient(addr string) (*GRPCPaymentClient, error) {
 	log.Printf("[INFO] connecting to Payment gRPC at %s", addr)
 
@@ -40,11 +35,7 @@ func NewGRPCPaymentClient(addr string) (*GRPCPaymentClient, error) {
 	}, nil
 }
 
-// AuthorizePayment вызывает ProcessPayment через gRPC.
-// Реализует интерфейс usecase.PaymentGateway — Use Case не знает
-// что под капотом gRPC (Dependency Inversion).
 func (c *GRPCPaymentClient) AuthorizePayment(ctx context.Context, orderID string, amount int64) (string, string, error) {
-	// Таймаут 2 секунды (как в Assignment 1)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
@@ -63,7 +54,6 @@ func (c *GRPCPaymentClient) AuthorizePayment(ctx context.Context, orderID string
 	return resp.GetTransactionId(), resp.GetStatus(), nil
 }
 
-// Close закрывает gRPC-соединение.
 func (c *GRPCPaymentClient) Close() {
 	if c.conn != nil {
 		c.conn.Close()

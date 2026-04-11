@@ -1,13 +1,4 @@
-// streaming-test-client — тестовый клиент для демонстрации
-// Server-side Streaming RPC (SubscribeToOrderUpdates).
-//
-// Использование:
-//
-//	go run streaming_client.go <order_id>
-//
-// Клиент подключается к Order Service gRPC и слушает обновления
-// статуса заказа в реальном времени.
-package main
+package streaming_client
 
 import (
 	"context"

@@ -28,19 +28,14 @@ func main() {
 
 	orderRepo := repository.NewPostgresOrderRepository(db)
 
-	// ─── gRPC Client → Payment Service ──────────────────────────────
-	// Заменяем REST PaymentClient на gRPC PaymentClient
 	paymentClient, err := app.NewGRPCPaymentClient(cfg.PaymentGRPCAddr)
 	if err != nil {
 		log.Fatalf("[FATAL] failed to connect to Payment gRPC: %v", err)
 	}
 	defer paymentClient.Close()
 
-	// UseCase: domain и use case слои НЕ изменены (Clean Architecture)
 	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient)
 
-	// ─── PostgreSQL LISTEN/NOTIFY для реального стриминга ────────────
-	// Создаём EventBus, который слушает PostgreSQL notifications
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBSSLMode,
@@ -51,10 +46,8 @@ func main() {
 	}
 	defer eventBus.Stop()
 
-	// Подключаем EventBus к репозиторию для NOTIFY при обновлении статуса
 	orderRepo.SetEventBus(eventBus)
 
-	// ─── gRPC Server (SubscribeToOrderUpdates — Server-side Streaming) ──
 	grpcAddr := fmt.Sprintf(":%s", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
@@ -72,7 +65,6 @@ func main() {
 		}
 	}()
 
-	// ─── REST Server (Gin — внешний API для клиентов) ───────────────
 	handler := transporthttp.NewOrderHandler(orderUC)
 	router := transporthttp.NewRouter(handler)
 
@@ -84,7 +76,6 @@ func main() {
 		}
 	}()
 
-	// ─── Graceful shutdown ──────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

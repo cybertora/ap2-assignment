@@ -10,9 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// OrderUseCase — бизнес-логика заказов.
-// ПОЛНОСТЬЮ ИДЕНТИЧЕН Assignment 1 (Clean Architecture preserved).
-// Ни одна строка бизнес-логики не была изменена при миграции на gRPC.
 type OrderUseCase struct {
 	repo           OrderRepository
 	paymentGateway PaymentGateway

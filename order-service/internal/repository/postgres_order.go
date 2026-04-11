@@ -9,18 +9,15 @@ import (
 	"order-service/internal/domain"
 )
 
-// PostgresOrderRepository реализует usecase.OrderRepository.
-// В Assignment 2 добавлен EventBus для PostgreSQL NOTIFY при обновлении статуса.
 type PostgresOrderRepository struct {
 	db       *sql.DB
-	eventBus *PgEventBus // NEW: для NOTIFY при обновлении статуса
+	eventBus *PgEventBus
 }
 
 func NewPostgresOrderRepository(db *sql.DB) *PostgresOrderRepository {
 	return &PostgresOrderRepository{db: db}
 }
 
-// SetEventBus подключает EventBus для отправки уведомлений при изменении статуса.
 func (r *PostgresOrderRepository) SetEventBus(eb *PgEventBus) {
 	r.eventBus = eb
 }
@@ -74,11 +71,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id string) (*doma
 	return &order, nil
 }
 
-// UpdateStatus обновляет статус заказа и ОТПРАВЛЯЕТ PostgreSQL NOTIFY.
-// Это обеспечивает реальный стриминг — подписчики получают обновления
-// через LISTEN/NOTIFY, а не через time.Sleep() polling.
 func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, id string, status string) error {
-	// Обновляем статус в БД
 	query := `UPDATE orders SET status = $1 WHERE id = $2`
 	result, err := r.db.ExecContext(ctx, query, status, id)
 	if err != nil {
@@ -91,7 +84,6 @@ func (r *PostgresOrderRepository) UpdateStatus(ctx context.Context, id string, s
 		return domain.ErrOrderNotFound
 	}
 
-	// NEW: отправляем NOTIFY для реального стриминга
 	if r.eventBus != nil {
 		payload := fmt.Sprintf("%s:%s", id, status)
 		notifyQuery := fmt.Sprintf("NOTIFY order_updates, '%s'", payload)
