@@ -29,14 +29,13 @@ func main() {
 	paymentRepo := repository.NewPostgresPaymentRepository(db)
 	paymentUC := usecase.NewPaymentUseCase(paymentRepo)
 
-	// ─── gRPC Server (ProcessPayment) ───────────────────────────────
 	grpcAddr := fmt.Sprintf(":%s", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Fatalf("[FATAL] failed to listen on %s: %v", grpcAddr, err)
 	}
 
-	// Бонус (+10%): gRPC Interceptor — логирует method name + duration
+	// бонус gRPC Interceptor
 	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(grpcserver.LoggingInterceptor),
 	)
@@ -51,7 +50,6 @@ func main() {
 		}
 	}()
 
-	// ─── REST Server (GET /payments/:order_id — оставляем из Assignment 1) ──
 	handler := transporthttp.NewPaymentHandler(paymentUC)
 	router := transporthttp.NewRouter(handler)
 
@@ -63,7 +61,6 @@ func main() {
 		}
 	}()
 
-	// ─── Graceful shutdown ──────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
