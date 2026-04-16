@@ -8,6 +8,7 @@ func NewRouter(handler *PaymentHandler) *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery())
 
 	r.POST("/payments", handler.CreatePayment)
+	r.GET("/payments/list", handler.ListPayments)
 	r.GET("/payments/:order_id", handler.GetPaymentByOrderID)
 
 	return r

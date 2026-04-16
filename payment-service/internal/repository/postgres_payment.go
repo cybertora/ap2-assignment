@@ -64,3 +64,55 @@ func (r *PostgresPaymentRepository) GetByOrderID(ctx context.Context, orderID st
 	}
 	return &payment, nil
 }
+
+func (r *PostgresPaymentRepository) ListByStatus(ctx context.Context, status string) ([]*domain.Payment, error) {
+	var rows *sql.Rows
+	var err error
+
+	if status == "" {
+		query := `
+			SELECT id, order_id, transaction_id, amount, status, created_at
+			FROM payments
+			ORDER BY created_at DESC
+		`
+		rows, err = r.db.QueryContext(ctx, query)
+	} else {
+		query := `
+			SELECT id, order_id, transaction_id, amount, status, created_at
+			FROM payments
+			WHERE status = $1
+			ORDER BY created_at DESC
+		`
+		rows, err = r.db.QueryContext(ctx, query, status)
+	}
+
+	if err != nil {
+		log.Printf("[ERROR] PostgresPaymentRepository.ListByStatus: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payments []*domain.Payment
+	for rows.Next() {
+		var p domain.Payment
+		if err := rows.Scan(
+			&p.ID,
+			&p.OrderID,
+			&p.TransactionID,
+			&p.Amount,
+			&p.Status,
+			&p.CreatedAt,
+		); err != nil {
+			log.Printf("[ERROR] PostgresPaymentRepository.ListByStatus scan: %v", err)
+			return nil, err
+		}
+		payments = append(payments, &p)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[ERROR] PostgresPaymentRepository.ListByStatus rows: %v", err)
+		return nil, err
+	}
+
+	return payments, nil
+}

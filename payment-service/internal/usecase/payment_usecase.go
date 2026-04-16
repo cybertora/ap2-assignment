@@ -59,3 +59,14 @@ func (uc *PaymentUseCase) GetPaymentByOrderID(ctx context.Context, orderID strin
 	}
 	return payment, nil
 }
+
+func (uc *PaymentUseCase) ListPayments(ctx context.Context, status string) ([]*domain.Payment, error) {
+	payments, err := uc.repo.ListByStatus(ctx, status)
+	if err != nil {
+		log.Printf("[ERROR] failed to list payments: %v", err)
+		return nil, err
+	}
+
+	log.Printf("[INFO] listed %d payments (filter: status=%q)", len(payments), status)
+	return payments, nil
+}

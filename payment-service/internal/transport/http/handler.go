@@ -52,6 +52,30 @@ func (h *PaymentHandler) GetPaymentByOrderID(c *gin.Context) {
 	c.JSON(http.StatusOK, toPaymentResponse(payment))
 }
 
+func (h *PaymentHandler) ListPayments(c *gin.Context) {
+	status := c.Query("status")
+
+	payments, err := h.uc.ListPayments(c.Request.Context(), status)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	var response []PaymentResponse
+	for _, p := range payments {
+		response = append(response, toPaymentResponse(p))
+	}
+
+	if response == nil {
+		response = []PaymentResponse{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"payments": response,
+		"total":    len(response),
+	})
+}
+
 func toPaymentResponse(payment *domain.Payment) PaymentResponse {
 	return PaymentResponse{
 		ID:            payment.ID,

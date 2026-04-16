@@ -6,8 +6,8 @@ github.com/cloudwego/base64x v0.1.4 h1:jwCgWpFanWmN8xoIUHa2rtzmkd5J2plF/dnLS6Xd/
 github.com/cloudwego/base64x v0.1.4/go.mod h1:0zlkT4Wn5C6NdauXdJRhSKRlJvmclQ1hhJgA0rcu/8w=
 github.com/cloudwego/iasm v0.2.0 h1:1KNIy1I1H9hNNFEEH3DVnI4UujN+1zjpuk6gwHLTssg=
 github.com/cloudwego/iasm v0.2.0/go.mod h1:8rXZaNYT2n95jn+zTI1sDr+IgcD2GVs0nlbbQPiEFhY=
-github.com/cybertora/ap2-proto-generated v1.0.1-0.20260410142929-b1c3085ed2dc h1:SP61N8kKVT+P8/vhBq0dqyckyA1Fe7f7yBK2u1EB16Q=
-github.com/cybertora/ap2-proto-generated v1.0.1-0.20260410142929-b1c3085ed2dc/go.mod h1:w8dxAnh3V7xkZ5rup/3E+UeECTkxWq+TWHrNvsest24=
+github.com/cybertora/ap2-proto-generated v1.0.1-0.20260416075624-88ad1ec25cb8 h1:TpTySn8/XxDH8CivWnrUckT1CqRWAF0NWKH7vRJ/GL0=
+github.com/cybertora/ap2-proto-generated v1.0.1-0.20260416075624-88ad1ec25cb8/go.mod h1:Umqsg26wyCtcKbpuNhMxgfFg6gnN2bZDs/Q7gtQMTHI=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
