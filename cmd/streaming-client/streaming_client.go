@@ -1,4 +1,4 @@
-package streaming_client
+package main
 
 import (
 	"context"

@@ -8,11 +8,8 @@ import (
 
 type OrderRepository interface {
 	Create(ctx context.Context, order *domain.Order) error
-
 	GetByID(ctx context.Context, id string) (*domain.Order, error)
-
 	UpdateStatus(ctx context.Context, id string, status string) error
-
 	GetByIdempotencyKey(ctx context.Context, key string) (*domain.Order, error)
 }
 
