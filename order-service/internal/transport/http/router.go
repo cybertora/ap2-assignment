@@ -8,6 +8,7 @@ func NewRouter(handler *OrderHandler) *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery())
 
 	r.POST("/orders", handler.CreateOrder)
+	r.GET("/orders/payments", handler.ListPayments)
 	r.GET("/orders/:id", handler.GetOrder)
 	r.PATCH("/orders/:id/cancel", handler.CancelOrder)
 

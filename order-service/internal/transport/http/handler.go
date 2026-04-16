@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"order-service/internal/app"
 	"order-service/internal/domain"
 	"order-service/internal/usecase"
 
@@ -12,11 +13,15 @@ import (
 )
 
 type OrderHandler struct {
-	uc *usecase.OrderUseCase
+	uc            *usecase.OrderUseCase
+	paymentClient *app.GRPCPaymentClient
 }
 
-func NewOrderHandler(uc *usecase.OrderUseCase) *OrderHandler {
-	return &OrderHandler{uc: uc}
+func NewOrderHandler(uc *usecase.OrderUseCase, paymentClient *app.GRPCPaymentClient) *OrderHandler {
+	return &OrderHandler{
+		uc:            uc,
+		paymentClient: paymentClient,
+	}
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
@@ -63,6 +68,55 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, toOrderResponse(order))
+}
+
+func (h *OrderHandler) ListPayments(c *gin.Context) {
+	statusParam := c.Query("status")
+
+	var filterStatus string
+	switch statusParam {
+	case "0":
+		filterStatus = "Authorized"
+	case "1":
+		filterStatus = "Declined"
+	case "":
+		filterStatus = "" // Без фильтра — все платежи
+	default:
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "invalid status: use 0 (Authorized), 1 (Declined), or omit for all",
+		})
+		return
+	}
+
+	payments, err := h.paymentClient.ListPayments(c.Request.Context(), filterStatus)
+	if err != nil {
+		log.Printf("[HANDLER ERROR] ListPayments gRPC call failed: %v", err)
+		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
+			Error: "payment service unavailable",
+		})
+		return
+	}
+
+	var response []PaymentListItem
+	for _, p := range payments {
+		response = append(response, PaymentListItem{
+			ID:            p.GetId(),
+			OrderID:       p.GetOrderId(),
+			TransactionID: p.GetTransactionId(),
+			Amount:        p.GetAmount(),
+			Status:        p.GetStatus(),
+			CreatedAt:     p.GetCreatedAt().AsTime(),
+		})
+	}
+
+	if response == nil {
+		response = []PaymentListItem{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"payments": response,
+		"total":    len(response),
+	})
 }
 
 func toOrderResponse(order *domain.Order) OrderResponse {

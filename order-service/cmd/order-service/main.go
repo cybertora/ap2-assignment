@@ -65,7 +65,7 @@ func main() {
 		}
 	}()
 
-	handler := transporthttp.NewOrderHandler(orderUC)
+	handler := transporthttp.NewOrderHandler(orderUC, paymentClient)
 	router := transporthttp.NewRouter(handler)
 
 	httpAddr := fmt.Sprintf(":%s", cfg.ServerPort)

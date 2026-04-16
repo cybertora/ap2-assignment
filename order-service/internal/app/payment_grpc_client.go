@@ -54,6 +54,24 @@ func (c *GRPCPaymentClient) AuthorizePayment(ctx context.Context, orderID string
 	return resp.GetTransactionId(), resp.GetStatus(), nil
 }
 
+func (c *GRPCPaymentClient) ListPayments(ctx context.Context, status string) ([]*paymentpb.PaymentResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	log.Printf("[INFO] calling Payment gRPC: ListPayments(status=%q)", status)
+
+	resp, err := c.client.ListPayments(ctx, &paymentpb.ListPaymentsRequest{
+		Status: status,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListPayments gRPC call failed: %w", err)
+	}
+
+	log.Printf("[INFO] Payment gRPC ListPayments returned %d payments", len(resp.GetPayments()))
+
+	return resp.GetPayments(), nil
+}
+
 func (c *GRPCPaymentClient) Close() {
 	if c.conn != nil {
 		c.conn.Close()

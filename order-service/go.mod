@@ -1,9 +1,9 @@
 module order-service
 
-go 1.22
+go 1.25.5
 
 require (
-	github.com/cybertora/ap2-proto-generated v1.0.1-0.20260410142929-b1c3085ed2dc
+	github.com/cybertora/ap2-proto-generated v1.0.1-0.20260416075624-88ad1ec25cb8
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
