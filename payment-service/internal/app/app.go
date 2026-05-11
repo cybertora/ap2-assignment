@@ -18,6 +18,10 @@ type Config struct {
 	DBSSLMode  string
 	ServerPort string
 	GRPCPort   string
+
+	RabbitMQURL             string
+	PaymentEventsExchange   string
+	PaymentEventsRoutingKey string
 }
 
 func LoadConfig() *Config {
@@ -30,6 +34,10 @@ func LoadConfig() *Config {
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
 		ServerPort: getEnv("SERVER_PORT", "8081"),
 		GRPCPort:   getEnv("GRPC_PORT", "50051"),
+
+		RabbitMQURL:             getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		PaymentEventsExchange:   getEnv("PAYMENT_EVENTS_EXCHANGE", "payments.events"),
+		PaymentEventsRoutingKey: getEnv("PAYMENT_EVENTS_ROUTING_KEY", "payment.processed"),
 	}
 }
 

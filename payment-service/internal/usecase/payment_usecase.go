@@ -6,16 +6,21 @@ import (
 	"time"
 
 	"payment-service/internal/domain"
+	"payment-service/internal/messaging"
 
 	"github.com/google/uuid"
 )
 
 type PaymentUseCase struct {
-	repo PaymentRepository
+	repo      PaymentRepository
+	publisher PaymentEventPublisher
 }
 
-func NewPaymentUseCase(repo PaymentRepository) *PaymentUseCase {
-	return &PaymentUseCase{repo: repo}
+func NewPaymentUseCase(repo PaymentRepository, publisher PaymentEventPublisher) *PaymentUseCase {
+	return &PaymentUseCase{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
 func (uc *PaymentUseCase) AuthorizePayment(ctx context.Context, orderID string, amount int64) (*domain.Payment, error) {
@@ -46,6 +51,21 @@ func (uc *PaymentUseCase) AuthorizePayment(ctx context.Context, orderID string, 
 	log.Printf("[INFO] payment created: id=%s order_id=%s transaction_id=%s status=%s amount=%d",
 		payment.ID, payment.OrderID, payment.TransactionID, payment.Status, payment.Amount)
 
+	if payment.IsAuthorized() && uc.publisher != nil {
+		event := messaging.PaymentProcessedEvent{
+			PaymentID:     payment.ID,
+			OrderID:       payment.OrderID,
+			TransactionID: payment.TransactionID,
+			Amount:        payment.Amount,
+			Status:        payment.Status,
+			ProcessedAt:   payment.CreatedAt,
+		}
+
+		if err := uc.publisher.PublishPaymentProcessed(ctx, event); err != nil {
+			log.Printf("[ERROR] failed to publish PaymentProcessed event for payment_id=%s: %v", payment.ID, err)
+		}
+	}
+
 	return payment, nil
 }
 
@@ -60,13 +80,8 @@ func (uc *PaymentUseCase) GetPaymentByOrderID(ctx context.Context, orderID strin
 	return payment, nil
 }
 
-func (uc *PaymentUseCase) ListPayments(ctx context.Context, status string) ([]*domain.Payment, error) {
-	payments, err := uc.repo.ListByStatus(ctx, status)
-	if err != nil {
-		log.Printf("[ERROR] failed to list payments: %v", err)
-		return nil, err
-	}
-
-	log.Printf("[INFO] listed %d payments (filter: status=%q)", len(payments), status)
-	return payments, nil
+// Добавь string в аргументы
+func (uc *PaymentUseCase) ListPayments(ctx context.Context, customerID string) ([]*domain.Payment, error) {
+	// Если твой репозиторий поддерживает фильтрацию, передай ID туда
+	return uc.repo.List(ctx, customerID)
 }

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"payment-service/internal/app"
+	"payment-service/internal/messaging"
 	"payment-service/internal/repository"
 	grpcserver "payment-service/internal/transport/grpc"
 	transporthttp "payment-service/internal/transport/http"
@@ -26,8 +27,22 @@ func main() {
 	db := app.ConnectDB(cfg)
 	defer db.Close()
 
+	publisher, err := messaging.NewPublisher(
+		cfg.RabbitMQURL,
+		cfg.PaymentEventsExchange,
+		cfg.PaymentEventsRoutingKey,
+	)
+	if err != nil {
+		log.Fatalf("[FATAL] failed to initialize RabbitMQ publisher: %v", err)
+	}
+	defer func() {
+		if err := publisher.Close(); err != nil {
+			log.Printf("[WARN] failed to close publisher cleanly: %v", err)
+		}
+	}()
+
 	paymentRepo := repository.NewPostgresPaymentRepository(db)
-	paymentUC := usecase.NewPaymentUseCase(paymentRepo)
+	paymentUC := usecase.NewPaymentUseCase(paymentRepo, publisher)
 
 	grpcAddr := fmt.Sprintf(":%s", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
@@ -35,7 +50,6 @@ func main() {
 		log.Fatalf("[FATAL] failed to listen on %s: %v", grpcAddr, err)
 	}
 
-	// бонус gRPC Interceptor
 	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(grpcserver.LoggingInterceptor),
 	)

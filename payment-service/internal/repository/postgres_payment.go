@@ -116,3 +116,34 @@ func (r *PostgresPaymentRepository) ListByStatus(ctx context.Context, status str
 
 	return payments, nil
 }
+
+func (r *PostgresPaymentRepository) List(ctx context.Context, customerID string) ([]*domain.Payment, error) {
+	query := "SELECT id, order_id, customer_id, amount, status, created_at FROM payments"
+
+	var rows *sql.Rows
+	var err error
+
+	if customerID != "" {
+		query += " WHERE customer_id = $1"
+		rows, err = r.db.QueryContext(ctx, query, customerID)
+	} else {
+		rows, err = r.db.QueryContext(ctx, query)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payments []*domain.Payment
+	for rows.Next() {
+		p := &domain.Payment{}
+		err := rows.Scan(&p.ID, &p.OrderID, &p.TransactionID, &p.Amount, &p.Status, &p.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		payments = append(payments, p)
+	}
+
+	return payments, nil
+}

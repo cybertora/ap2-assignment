@@ -1,7 +1,6 @@
 version: "3.9"
 
 services:
-  # ─── Databases ─────────────────────────────────────────────────────
   order-db:
     image: postgres:16-alpine
     container_name: order-db
@@ -38,15 +37,29 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Payment Service (gRPC Server + REST) ──────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   payment-service:
     build:
       context: ./payment-service
       dockerfile: Dockerfile
     container_name: payment-service
     ports:
-      - "8081:8081"    # REST (GET /payments/:order_id)
-      - "50051:50051"  # gRPC (ProcessPayment)
+      - "8081:8081"
+      - "50051:50051"
     environment:
       DB_HOST: payment-db
       DB_PORT: "5432"
@@ -56,20 +69,24 @@ services:
       DB_SSLMODE: disable
       SERVER_PORT: "8081"
       GRPC_PORT: "50051"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PAYMENT_EVENTS_EXCHANGE: payments.events
+      PAYMENT_EVENTS_ROUTING_KEY: payment.processed
     depends_on:
       payment-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: on-failure
 
-  # ─── Order Service (REST + gRPC Client → Payment + gRPC Server Streaming) ──
   order-service:
     build:
       context: ./order-service
       dockerfile: Dockerfile
     container_name: order-service
     ports:
-      - "8080:8080"    # REST (POST /orders, GET /orders/:id, etc.)
-      - "50052:50052"  # gRPC (SubscribeToOrderUpdates streaming)
+      - "8080:8080"
+      - "50052:50052"
     environment:
       DB_HOST: order-db
       DB_PORT: "5432"
@@ -85,6 +102,23 @@ services:
         condition: service_healthy
       payment-service:
         condition: service_started
+    restart: on-failure
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PAYMENT_EVENTS_EXCHANGE: payments.events
+      PAYMENT_EVENTS_ROUTING_KEY: payment.processed
+      PAYMENT_DLX_EXCHANGE: payments.dlx
+      PAYMENT_QUEUE: notification.payment.processed
+      PAYMENT_DLQ: notification.payment.processed.dlq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     restart: on-failure
 
 volumes:
