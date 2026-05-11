@@ -1,257 +1,145 @@
-# AP2 Assignment 2 — gRPC Migration & Contract-First Development
+# AP2 — Microservices Platform (Assignment 4)
 
 **Student**: Taubakabyl Nurlybek  
 **Course**: Advanced Programming 2  
-**Scope**: Lecture 3 (Protocol Buffers) & Lecture 4 (gRPC)
+**Assignment**: 4 — Performance Optimization & External Integrations  
+**Scope**: Lecture 7 (Caching) + Lectures 8-9 (Background Jobs & External APIs)  
+**Deadline**: 12.05.2026
 
 ---
 
-## 📋 Repository Links
+## 🎯 Реализованные требования
 
-| Repository | URL |
-|---|---|
-| **Proto Repository** (`.proto` files only) | `https://github.com/YOUR_GITHUB_USER/ap2-proto` |
-| **Generated Code Repository** (auto-generated `.pb.go`) | `https://github.com/YOUR_GITHUB_USER/ap2-proto-generated` |
-| **Main Project Repository** | `https://github.com/YOUR_GITHUB_USER/ap2-assignment` |
-
----
-
-## 🏗️ Architecture Overview
-
-### What Changed from Assignment 1 → Assignment 2
-
-| Component | Assignment 1 | Assignment 2 |
-|---|---|---|
-| Order ↔ Payment communication | REST (HTTP) | **gRPC** (Protocol Buffers) |
-| Payment Service | HTTP Server only | HTTP Server + **gRPC Server** |
-| Order Service | HTTP Server + HTTP Client | HTTP Server + **gRPC Client** + **gRPC Streaming Server** |
-| Contract definition | N/A | **Contract-First** (.proto files) |
-| Code generation | N/A | **GitHub Actions** (automated) |
-| Real-time updates | N/A | **Server-side Streaming** (PostgreSQL LISTEN/NOTIFY) |
-
-### What Did NOT Change (Clean Architecture Preserved ✅)
-
-- **Domain Layer** (`internal/domain/`) — Zero changes
-- **Use Case Layer** (`internal/usecase/`) — Zero changes
-- **Ports/Interfaces** (`usecase/ports.go`) — Zero changes
-- Only the **Delivery Layer** (transport/handlers) was updated
+- **Redis Cache-aside** в Order Service с правильной инвалидацией
+- **Background Worker** в Notification Service (асинхронная обработка уведомлений)
+- **Adapter Pattern** для внешних провайдеров уведомлений
+- **Idempotency** через Redis
+- **Exponential Backoff + Retry** механизм
+- **Rate Limiter** (Bonus) на Redis
+- Полная Docker-инфраструктура + Redis
 
 ---
 
-## 📐 Architecture Diagram
+## 🏗️ Архитектура
 
 ```mermaid
-graph TB
-    Client["🖥️ Client / Postman"]
-    StreamClient["📡 Streaming Client<br/>(gRPC)"]
+flowchart LR
+    Client[("HTTP Client")] -->|"GET /orders/:id"| OrderAPI
+    Client -->|"POST /orders"| OrderAPI
 
-    subgraph "Order Service"
-        OH["HTTP Handler<br/>Gin Router<br/>:8080"]
-        OGRPC["gRPC Streaming Server<br/>:50052"]
-        OUC["Use Case Layer<br/>OrderUseCase<br/>⚡ UNCHANGED"]
-        OR["Repository Layer<br/>PostgresOrderRepo"]
-        ODB[("order_db<br/>PostgreSQL")]
-        EB["EventBus<br/>PG LISTEN/NOTIFY"]
-        GPC["gRPC Payment Client"]
-
-        OH --> OUC
-        OUC --> OR
-        OUC --> GPC
-        OR --> ODB
-        OR -->|"NOTIFY"| EB
-        EB -->|"Events"| OGRPC
+    subgraph OrderSVC["Order Service"]
+        OrderAPI[Gin HTTP] --> RL{{Rate Limiter<br/>Redis}}
+        RL --> UC[Order UseCase]
+        UC <-->|cache-aside| RedisCache[(Redis<br/>order:&lt;id&gt;<br/>TTL=5m)]
+        UC --> PG[(Postgres<br/>orders)]
+        UC -->|gRPC| PaymentSVC
     end
 
-    subgraph "Payment Service"
-        PH["HTTP Handler<br/>Gin Router<br/>:8081"]
-        PGRPC["gRPC Server<br/>:50051<br/>+ Interceptor 🔍"]
-        PUC["Use Case Layer<br/>PaymentUseCase<br/>⚡ UNCHANGED"]
-        PR["Repository Layer<br/>PostgresPaymentRepo"]
-        PDB[("payment_db<br/>PostgreSQL")]
-
-        PH --> PUC
-        PGRPC --> PUC
-        PUC --> PR
-        PR --> PDB
+    subgraph PaymentSVC["Payment Service"]
+        PUC[Payment UseCase] --> PDB[(Postgres<br/>payments)]
+        PUC -->|publish payment.processed| MQ
     end
 
-    subgraph "Contract-First (GitHub)"
-        PROTO["📄 Proto Repo<br/>.proto files"]
-        GEN["⚙️ Generated Repo<br/>.pb.go files<br/>GitHub Actions"]
-        PROTO -->|"trigger"| GEN
+    MQ((RabbitMQ)) --> NotifQ[[notification.payment.processed]]
+
+    subgraph NotifSVC["Notification Service (Worker)"]
+        NotifQ --> Consumer
+        Consumer --> Pool{{Worker Pool}}
+        Pool --> Idem[(Redis Idempotency)]
+        Pool --> Retry[Exponential Backoff + Retry]
+        Retry --> Provider{Adapter<br/>EmailSender}
+        Provider -->|SIMULATED| Mock[Simulated Sender]
+        Provider -->|REAL| SMTP[SMTP Sender]
+        Pool -. failed .-> DLQ[[Dead Letter Queue]]
     end
-
-    Client -->|"REST: POST /orders<br/>GET /orders/:id<br/>PATCH /orders/:id/cancel"| OH
-    Client -->|"REST: GET /payments/:order_id"| PH
-    StreamClient -->|"gRPC Stream:<br/>SubscribeToOrderUpdates"| OGRPC
-    GPC -->|"gRPC: ProcessPayment"| PGRPC
-    GEN -.->|"go get @v1.0.0"| GPC
-    GEN -.->|"go get @v1.0.0"| PGRPC
-
-    style OUC fill:#f3e5f5,stroke:#7b1fa2
-    style PUC fill:#f3e5f5,stroke:#7b1fa2
-    style OGRPC fill:#e8f5e9,stroke:#2e7d32
-    style PGRPC fill:#e8f5e9,stroke:#2e7d32
-    style EB fill:#fff3e0,stroke:#ef6c00
-    style PROTO fill:#e3f2fd,stroke:#1565c0
-    style GEN fill:#e3f2fd,stroke:#1565c0
 ```
 
 ---
 
-## 📁 Project Structure
+## 🚀 Как запустить проект
 
+```bash
+docker compose up --build
 ```
-project-root/
-├── docker-compose.yml
-├── .env.example
-├── README.md
-├── cmd/
-│   └── streaming-client/
-│       └── streaming_client.go        # Test client for streaming demo
-│
-├── order-service/
-│   ├── Dockerfile
-│   ├── go.mod / go.sum
-│   ├── cmd/order-service/
-│   │   └── main.go                    # UPDATED: starts REST + gRPC servers
-│   ├── internal/
-│   │   ├── domain/                    # ⚡ UNCHANGED from Assignment 1
-│   │   │   ├── order.go
-│   │   │   └── errors.go
-│   │   ├── usecase/                   # ⚡ UNCHANGED from Assignment 1
-│   │   │   ├── ports.go
-│   │   │   └── order_usecase.go
-│   │   ├── repository/
-│   │   │   ├── postgres_order.go      # UPDATED: added NOTIFY on status change
-│   │   │   └── event_bus.go           # NEW: PostgreSQL LISTEN/NOTIFY EventBus
-│   │   ├── transport/
-│   │   │   ├── http/                  # ⚡ UNCHANGED from Assignment 1
-│   │   │   │   ├── dto.go
-│   │   │   │   ├── handler.go
-│   │   │   │   └── router.go
-│   │   │   └── grpc/                  # NEW: gRPC streaming server
-│   │   │       └── server.go
-│   │   └── app/
-│   │       ├── app.go                 # UPDATED: added gRPC config
-│   │       └── payment_grpc_client.go # NEW: replaces REST PaymentClient
-│   └── migrations/
-│       └── 001_create_orders_up.sql
-│
-└── payment-service/
-    ├── Dockerfile
-    ├── go.mod / go.sum
-    ├── cmd/payment-service/
-    │   └── main.go                    # UPDATED: starts REST + gRPC servers
-    ├── internal/
-    │   ├── domain/                    # ⚡ UNCHANGED from Assignment 1
-    │   │   ├── payment.go
-    │   │   └── errors.go
-    │   ├── usecase/                   # ⚡ UNCHANGED from Assignment 1
-    │   │   ├── ports.go
-    │   │   └── payment_usecase.go
-    │   ├── repository/
-    │   │   └── postgres_payment.go    # ⚡ UNCHANGED
-    │   ├── transport/
-    │   │   ├── http/                  # ⚡ UNCHANGED from Assignment 1
-    │   │   │   ├── dto.go
-    │   │   │   ├── handler.go
-    │   │   │   └── router.go
-    │   │   └── grpc/                  # NEW: gRPC server + interceptor
-    │   │       ├── server.go
-    │   │       └── interceptor.go     # BONUS: logging interceptor
-    │   └── app/
-    │       └── app.go                 # UPDATED: added GRPC_PORT config
-    └── migrations/
-        └── 001_create_payments_up.sql
-```
+
+**Доступные сервисы:**
+
+| Сервис             | Адрес                          | Примечание                     |
+|--------------------|--------------------------------|--------------------------------|
+| Order Service      | http://localhost:8080          | Основной API                   |
+| Payment Service    | http://localhost:8081          | —                              |
+| RabbitMQ UI        | http://localhost:15672         | guest / guest                  |
+| Redis              | localhost:6379                 | —                              |
 
 ---
 
-## 🚀 How to Run
+## 🔑 Ключевые технические решения
 
-### Prerequisites
-- Docker & Docker Compose
-- Go 1.22+ (for streaming test client)
+### 1. Caching в Order Service
+- **Паттерн**: Cache-Aside
+- **TTL**: 5 минут (`CACHE_TTL_SECONDS`)
+- **Инвалидация**: Атомарная (`DEL`) после каждого изменения статуса заказа (`UpdateStatus`, оплата, отмена)
+- При `GET /orders/:id` сначала проверяется Redis, потом БД
 
-### 1. Start all services
-```bash
-cd project-root
-docker-compose up --build
-```
+### 2. Notification Service — Background Worker
+- Уведомления полностью вынесены из HTTP-пути в асинхронный worker
+- Worker Pool с настраиваемым количеством горутин
+- Manual ACK + DLQ для надёжности
 
-### 2. Test REST endpoints (same as Assignment 1)
-```bash
-# Create order (Happy Path)
-curl -X POST http://localhost:8080/orders \
-  -H "Content-Type: application/json" \
-  -d '{"customer_id": "cust-1", "item_name": "Laptop", "amount": 15000}'
+### 3. Adapter Pattern
+- Интерфейс `EmailSender`
+- Две реализации:
+    - `SimulatedSender` — имитирует задержку и случайные ошибки (для тестирования retry)
+    - `SMTPSender` — реальная отправка через SMTP
+- Переключение: `PROVIDER_MODE=SIMULATED|REAL`
 
-# Get order
-curl http://localhost:8080/orders/<ORDER_ID>
+### 4. Idempotency & Retries
+- Идемпотентность через Redis `SETNX`
+- Exponential Backoff с jitter
+- После исчерпания попыток — сообщение уходит в DLQ
 
-# Cancel order
-curl -X PATCH http://localhost:8080/orders/<ORDER_ID>/cancel
-
-# Get payment
-curl http://localhost:8081/payments/<ORDER_ID>
-```
-
-### 3. Test Streaming (Server-side Streaming RPC)
-
-**Terminal 1** — Start streaming client:
-```bash
-cd project-root
-go run cmd/streaming-client/streaming_client.go <ORDER_ID>
-```
-
-**Terminal 2** — Change order status:
-```bash
-# Cancel the order → streaming client immediately receives the update!
-curl -X PATCH http://localhost:8080/orders/<ORDER_ID>/cancel
-```
-
-### 4. Verify gRPC Interceptor (Bonus)
-Check Payment Service logs:
-```bash
-docker logs payment-service 2>&1 | grep "gRPC INTERCEPTOR"
-```
-You'll see:
-```
-[gRPC INTERCEPTOR] method=/payment.PaymentService/ProcessPayment duration=1.234ms status=OK
-```
+### 5. Rate Limiter (Bonus)
+- Fixed Window алгоритм на Redis
+- Лимит: 10 запросов в минуту (настраивается)
+- Поддержка заголовка `X-User-Id`
 
 ---
 
-## 🔧 Contract-First Flow
+## 📁 Основные изменения Assignment 4
 
-```
-1. Edit .proto files in Proto Repo
-2. Push to GitHub
-3. GitHub Actions in Generated Repo runs protoc
-4. Generated .pb.go files are committed with a tag (v1.0.0)
-5. Services use: go get github.com/YOUR_GITHUB_USER/ap2-proto-generated@v1.0.0
-```
+- `order-service/internal/cache/` — слой кэширования
+- `order-service/internal/transport/http/middleware/rate_limiter.go` — Rate Limiter
+- `notification-service/internal/provider/` — Adapter Pattern
+- `notification-service/internal/service/` — Worker + Idempotency
+- `notification-service/internal/retry/backoff.go` — Retry Policy
+- Обновлён `docker-compose.yml` + Redis
 
 ---
 
-## 📝 gRPC Service Definitions
+## 🧪 Как тестировать (для защиты)
 
-### PaymentService (payment.proto)
-```protobuf
-service PaymentService {
-  rpc ProcessPayment(PaymentRequest) returns (PaymentResponse);
-}
-```
+1. **Cache Hit/Miss**: Создать заказ → оплатить → проверить логи (`CACHE HIT` / `CACHE MISS`)
+2. **Invalidation**: Изменить статус заказа → следующий `GET` должен вернуть актуальные данные
+3. **Retry**: `PROVIDER_MODE=SIMULATED` → смотреть backoff в логах
+4. **Idempotency**: Отправить одно и то же событие несколько раз — письмо должно отправиться только один раз
+5. **Rate Limiter**: Отправить 15+ запросов подряд → должен вернуться `429 Too Many Requests`
 
-### OrderService (order.proto)
-```protobuf
-service OrderService {
-  rpc SubscribeToOrderUpdates(OrderRequest) returns (stream OrderStatusUpdate);
-}
-```
+---
 
-## 🔄 Shutdown
-```bash
-docker-compose down -v
-```
+## 📌 Статус выполнения
+
+- [x] Redis Cache-aside + Invalidation
+- [x] Background Jobs + Worker Pool
+- [x] Adapter Pattern + Provider switching
+- [x] Idempotency (Redis SETNX)
+- [x] Exponential Backoff + Retry
+- [x] Rate Limiter (Bonus)
+- [x] Полная Docker-инфраструктура
+
+**Готов к защите.**
+
+---
+
+Скопируй этот текст в файл `README.md`.
+
+Хочешь более короткую версию или добавить что-то конкретное (например, скриншоты или дополнительные тесты) — скажи.
