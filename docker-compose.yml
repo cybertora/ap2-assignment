@@ -52,6 +52,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # === NEW: Redis для кэширования, идемпотентности и rate limit ===
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   payment-service:
     build:
       context: ./payment-service
@@ -73,10 +88,8 @@ services:
       PAYMENT_EVENTS_EXCHANGE: payments.events
       PAYMENT_EVENTS_ROUTING_KEY: payment.processed
     depends_on:
-      payment-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      payment-db: { condition: service_healthy }
+      rabbitmq:   { condition: service_healthy }
     restart: on-failure
 
   order-service:
@@ -97,11 +110,17 @@ services:
       SERVER_PORT: "8080"
       PAYMENT_GRPC_ADDR: "payment-service:50051"
       GRPC_PORT: "50052"
+      # === NEW ===
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      CACHE_TTL_SECONDS: "300"
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_RPM: "10"
     depends_on:
-      order-db:
-        condition: service_healthy
-      payment-service:
-        condition: service_started
+      order-db:        { condition: service_healthy }
+      payment-service: { condition: service_started }
+      redis:           { condition: service_healthy }
     restart: on-failure
 
   notification-service:
@@ -116,11 +135,26 @@ services:
       PAYMENT_DLX_EXCHANGE: payments.dlx
       PAYMENT_QUEUE: notification.payment.processed
       PAYMENT_DLQ: notification.payment.processed.dlq
+      # === NEW ===
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "1"
+      IDEMPOTENCY_TTL_HOURS: "24"
+      PROVIDER_MODE: "SIMULATED"        # REAL | SIMULATED
+      SMTP_HOST: "smtp.mailtrap.io"
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: "no-reply@shop.local"
+      RETRY_MAX_ATTEMPTS: "5"
+      RETRY_BASE_DELAY_MS: "2000"
+      WORKER_POOL_SIZE: "4"
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      rabbitmq: { condition: service_healthy }
+      redis:    { condition: service_healthy }
     restart: on-failure
 
 volumes:
   order-data:
   payment-data:
+  redis-data:
