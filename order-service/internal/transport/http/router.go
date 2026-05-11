@@ -1,11 +1,22 @@
 package http
 
-import "github.com/gin-gonic/gin"
+import (
+	"order-service/internal/transport/http/middleware"
 
-func NewRouter(handler *OrderHandler) *gin.Engine {
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+)
+
+// NewRouter — теперь принимает Redis и параметры rate limit.
+// Если rateLimitEnabled=false или rdb==nil — middleware не подключается.
+func NewRouter(handler *OrderHandler, rdb *redis.Client, rateLimitEnabled bool, rpm int) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
+
+	if rateLimitEnabled && rdb != nil {
+		r.Use(middleware.NewRateLimiter(rdb, rpm))
+	}
 
 	r.POST("/orders", handler.CreateOrder)
 	r.GET("/orders/payments", handler.ListPayments)

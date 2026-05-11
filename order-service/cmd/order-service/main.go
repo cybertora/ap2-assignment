@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"order-service/internal/app"
+	"order-service/internal/cache"
 	"order-service/internal/repository"
 	grpcserver "order-service/internal/transport/grpc"
 	transporthttp "order-service/internal/transport/http"
@@ -20,11 +21,17 @@ import (
 
 func main() {
 	log.Println("[INFO] starting Order Service...")
-
 	cfg := app.LoadConfig()
 
 	db := app.ConnectDB(cfg)
 	defer db.Close()
+
+	// --- Redis (cache + rate limiter) ---
+	rdb := app.NewRedisClient(cfg)
+	defer rdb.Close()
+
+	// Адаптер кэша
+	orderCache := cache.NewRedisOrderCache(rdb, cfg.CacheTTLSeconds)
 
 	orderRepo := repository.NewPostgresOrderRepository(db)
 
@@ -34,7 +41,8 @@ func main() {
 	}
 	defer paymentClient.Close()
 
-	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient)
+	// Use-case теперь получает кэш как зависимость через интерфейс.
+	orderUC := usecase.NewOrderUseCase(orderRepo, paymentClient, orderCache)
 
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -45,7 +53,6 @@ func main() {
 		log.Fatalf("[FATAL] failed to start event bus: %v", err)
 	}
 	defer eventBus.Stop()
-
 	orderRepo.SetEventBus(eventBus)
 
 	grpcAddr := fmt.Sprintf(":%s", cfg.GRPCPort)
@@ -53,7 +60,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("[FATAL] failed to listen on %s: %v", grpcAddr, err)
 	}
-
 	grpcSrv := grpc.NewServer()
 	orderGRPCHandler := grpcserver.NewOrderGRPCServer(eventBus)
 	orderpb.RegisterOrderServiceServer(grpcSrv, orderGRPCHandler)
@@ -66,7 +72,7 @@ func main() {
 	}()
 
 	handler := transporthttp.NewOrderHandler(orderUC, paymentClient)
-	router := transporthttp.NewRouter(handler)
+	router := transporthttp.NewRouter(handler, rdb, cfg.RateLimitEnabled, cfg.RateLimitRPM)
 
 	httpAddr := fmt.Sprintf(":%s", cfg.ServerPort)
 	go func() {
