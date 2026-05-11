@@ -1,6 +1,6 @@
 # AP2 — Microservices Platform (Assignment 4)
 
-**Student**: Taubakabyl Nurlybek  
+**Student**: Rassul Tokatov 
 **Course**: Advanced Programming 2  
 **Assignment**: 4 — Performance Optimization & External Integrations  
 **Scope**: Lecture 7 (Caching) + Lectures 8-9 (Background Jobs & External APIs)  
